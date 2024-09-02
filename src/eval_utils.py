@@ -4,6 +4,10 @@ from collections import Counter
 import logging
 import os
 import configparser
+from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+import requests
+import unicodedata
+from tqdm import tqdm
 import json
 import jieba
 import string
