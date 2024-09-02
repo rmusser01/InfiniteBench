@@ -497,7 +497,7 @@ def chat_with_ollama(input_data, custom_prompt, api_url="http://127.0.0.1:11434/
         return f"Ollama: Error occurred while processing summary with ollama: {str(e)}"
 
 
-def summarize_with_vllm(
+def chat_with_vllm(
         input_data: Union[str, dict, list],
         custom_prompt_input: str,
         api_key: str = None,
