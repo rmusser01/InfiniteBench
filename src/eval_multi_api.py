@@ -1,7 +1,12 @@
-import requests
+# eval_multi_api.py
+# Description: Evaluate a language model on a conversational task using multiple APIs
+#
+# Usage: python eval_multi_api.py --task question_answering --api openai --output_dir ./results --data_dir ./data --verbose
+#
+from args import parse_args
 import json
-import logging
 from pathlib import Path
+import time
 from typing import Dict, Any, Optional
 from eval_utils import (
     create_msgs,
@@ -10,9 +15,7 @@ from eval_utils import (
     iter_jsonl,
     get_answer,
 )
-import time
-from args import parse_args
-
+#
 # Import API-specific functions
 from LLM_API_Calls import (
     chat_with_openai,
@@ -83,7 +86,7 @@ def main():
     api_name = args.api  
 
     # Load config from a JSON file
-    client = MultiAPILLMClient('config.json')
+    client = MultiAPILLMClient('config.txt')
 
     examples = load_data(task)
 
