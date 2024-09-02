@@ -433,10 +433,8 @@ def truncate_input(input, max_length, manner="middle"):
 def load_comprehensive_config():
     # Get the directory of the current script
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    # Go up one level to the project root directory
-    project_root = os.path.dirname(current_dir)
-    # Construct the path to the config file in the project root directory
-    config_path = os.path.join(project_root, 'config.txt')
+    # Construct the path to the config file in the same directory as the script
+    config_path = os.path.join(current_dir, 'config.txt')
     # Create a ConfigParser object
     config = configparser.ConfigParser()
     # Read the configuration file
