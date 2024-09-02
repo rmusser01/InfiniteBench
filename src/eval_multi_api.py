@@ -18,7 +18,7 @@
 #  - vllm
 #  - tabbyapi
 #
-import json
+import configparser
 from pathlib import Path
 import time
 from typing import Dict, Any, Optional, List
@@ -67,8 +67,19 @@ class MultiAPILLMClient:
         }
 
     def load_config(self, config_path: str) -> Dict[str, Any]:
-        with open(config_path, 'r') as f:
-            return json.load(f)
+        config = configparser.ConfigParser()
+        config.read(config_path)
+
+        # Convert the ConfigParser object to a dictionary
+        config_dict = {section: dict(config.items(section)) for section in config.sections()}
+
+        # Flatten the dictionary if needed (e.g., if you don't want nested sections)
+        flattened_config = {}
+        for section, params in config_dict.items():
+            for key, value in params.items():
+                flattened_config[key] = value
+
+        return flattened_config
 
     def chat(self, api_name: str, messages: List[Dict[str, str]],
              model: Optional[str] = None,
@@ -123,13 +134,20 @@ def main():
     args = parse_args()
     verbose = args.verbose
     task = args.task
-    # New argument for selecting the API
     api_name = args.api
 
     # Load config from a JSON file
     client = MultiAPILLMClient('config.txt')
 
-    examples = load_data(task)
+    # Construct the correct path based on the provided data_dir and task
+    data_path = Path(args.data_dir) / f"{task}.jsonl"
+
+    # Make sure the data_path points to the correct file
+    if not data_path.exists():
+        raise FileNotFoundError(f"Data file not found: {data_path}")
+
+    # Load data
+    examples = load_data(data_path)
 
     result_dir = Path(args.output_dir)
     result_dir.mkdir(exist_ok=True, parents=True)
