@@ -1,13 +1,28 @@
 # eval_multi_api.py
 # Description: Evaluate a language model on a conversational task using multiple APIs
 #
-# Usage: python eval_multi_api.py --task question_answering --api openai --output_dir ./results --data_dir ./data --verbose
+# Usage: python eval_multi_api.py --task question_answering --api <api_name>> --output_dir ./results --data_dir ./data --verbose
+#  API endpoints are defined in the config file (config.txt)
+#  The API key for the selected API should be defined in the config file
+# APIs Supported are:
+#  - openai
+#  - anthropic
+#  - cohere
+#  - groq
+#  - openrouter
+#  - deepseek
+#  - mistral
+#  - llamacpp
+#  - kobold
+#  - oobabooga
+#  - vllm
+#  - tabbyapi
 #
 from args import parse_args
 import json
 from pathlib import Path
 import time
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from eval_utils import (
     create_msgs,
     load_data,
@@ -15,7 +30,7 @@ from eval_utils import (
     iter_jsonl,
     get_answer,
 )
-#
+
 # Import API-specific functions
 from LLM_API_Calls import (
     chat_with_openai,
@@ -27,7 +42,6 @@ from LLM_API_Calls import (
     chat_with_mistral
 )
 from LLM_API_Calls_Local import (
-    chat_with_local_llm,
     chat_with_llama,
     chat_with_kobold,
     chat_with_oobabooga,
@@ -46,8 +60,7 @@ class MultiAPILLMClient:
             'openrouter': chat_with_openrouter,
             'deepseek': chat_with_deepseek,
             'mistral': chat_with_mistral,
-            'local_llm': chat_with_local_llm,
-            'llama': chat_with_llama,
+            'llamacpp': chat_with_llama,
             'kobold': chat_with_kobold,
             'oobabooga': chat_with_oobabooga,
             'vllm': chat_with_vllm,
@@ -58,8 +71,10 @@ class MultiAPILLMClient:
         with open(config_path, 'r') as f:
             return json.load(f)
 
-    def chat(self, api_name: str, messages: list, model: Optional[str] = None, 
-             temperature: Optional[float] = None, max_tokens: Optional[int] = None, 
+    def chat(self, api_name: str, messages: List[Dict[str, str]],
+             model: Optional[str] = None,
+             temperature: Optional[float] = None,
+             max_tokens: Optional[int] = None,
              **kwargs) -> str:
         if api_name not in self.api_functions:
             raise ValueError(f"Unsupported API: {api_name}")
@@ -75,15 +90,42 @@ class MultiAPILLMClient:
         temperature = temperature or self.config.get('temperature', {}).get(api_name)
         max_tokens = max_tokens or self.config.get('max_tokens', {}).get(api_name)
 
-        return chat_function(api_key, messages, model=model, temperature=temperature, 
-                             max_tokens=max_tokens, **kwargs)
+        # Extract the input_data from messages (assuming it's the last user message)
+        input_data = next((msg['content'] for msg in reversed(messages) if msg['role'] == 'user'), "")
+
+        # Prepare common parameters
+        common_params = {
+            "api_key": api_key,
+            "input_data": input_data,
+            "custom_prompt_arg": kwargs.get('custom_prompt_arg', ""),
+        }
+
+        # Handle specific APIs
+        if api_name in ['openai', 'groq', 'openrouter', 'deepseek', 'mistral']:
+            return chat_function(**common_params, temp=temperature, system_message=kwargs.get('system_message'))
+        elif api_name == 'anthropic':
+            return chat_function(**common_params, model=model, max_retries=kwargs.get('max_retries', 3),
+                                 retry_delay=kwargs.get('retry_delay', 5), system_prompt=kwargs.get('system_message'))
+        elif api_name == 'cohere':
+            return chat_function(**common_params, model=model, system_prompt=kwargs.get('system_message'))
+        elif api_name == 'llamacpp':
+            return chat_function(**common_params, api_url=kwargs.get('api_url'), system_prompt=kwargs.get('system_message'))
+        elif api_name == 'kobold':
+            return chat_function(**common_params, kobold_api_ip=kwargs.get('kobold_api_ip'),
+                                 temp=temperature, system_message=kwargs.get('system_message'))
+        elif api_name in ['oobabooga', 'vllm', 'tabbyapi']:
+            # These APIs might need special handling, adjust as necessary
+            return chat_function(**common_params, **kwargs)
+        else:
+            # For any other APIs, pass all parameters
+            return chat_function(**common_params, model=model, temperature=temperature, max_tokens=max_tokens, **kwargs)
 
 def main():
     args = parse_args()
     verbose = args.verbose
     task = args.task
     # New argument for selecting the API
-    api_name = args.api  
+    api_name = args.api
 
     # Load config from a JSON file
     client = MultiAPILLMClient('config.txt')
@@ -123,14 +165,17 @@ def main():
             print("...")
             print(prompt[-300:])
             print("==============================")
+
         # Make prediction
         try:
             response = client.chat(
                 api_name, 
-                msgs, 
+                # Pass the full messages list
+                msgs,
                 custom_prompt_arg=prompt,
                 temperature=client.config.get('temperature', {}).get(api_name),
-                max_tokens=client.config.get('max_tokens', {}).get(api_name)
+                max_tokens=client.config.get('max_tokens', {}).get(api_name),
+                system_message=client.config.get('system_messages', {}).get(api_name)
             )
             preds.append(
                 {
