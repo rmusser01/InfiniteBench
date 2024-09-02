@@ -20,7 +20,6 @@ from LLM_API_Calls import (
     chat_with_cohere,
     chat_with_groq,
     chat_with_openrouter,
-    chat_with_huggingface,
     chat_with_deepseek,
     chat_with_mistral
 )
@@ -42,7 +41,6 @@ class MultiAPILLMClient:
             'cohere': chat_with_cohere,
             'groq': chat_with_groq,
             'openrouter': chat_with_openrouter,
-            'huggingface': chat_with_huggingface,
             'deepseek': chat_with_deepseek,
             'mistral': chat_with_mistral,
             'local_llm': chat_with_local_llm,
