@@ -1,24 +1,22 @@
-from rouge import Rouge
-import re
-from collections import Counter
+import configparser
+import json
 import logging
 import os
-import configparser
-from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
-import requests
-import unicodedata
-from tqdm import tqdm
-import json
-import jieba
+import re
 import string
+from collections import Counter
 from pathlib import Path
+from typing import Optional
+
+import jieba
+from rouge import Rouge
+
 from prompt import (
     gpt4_templates,
     kimi_templates,
     claude2_templates,
     yarn_mistral_templates,
 )
-
 
 DATA_NAME_TO_PATH = {
     # Retrieval tasks
@@ -125,25 +123,152 @@ Do not consider the complexity, practicality or feasibility of the task."""  # n
     else:
         return "You are a helpful assistant."
 
-
-def create_prompt(eg: dict, data_name: str, model_name: str, data_dir) -> str:
+# Original - Commented out as GPT4 is no longer used....
+# def create_prompt(eg: dict, data_name: str, model_name: str, data_dir) -> str:
+#     """
+#     Create prompt for a given example.
+#
+#     Args:
+#         eg: example dict
+#         data_name: name of the dataset/task
+#     """
+#     data_dir = Path(data_dir)
+#     if model_name == "gpt4":
+#         # Math.Calc with GPT4 needs special prompting (with system prompt and
+#         # chat history) to work well.
+#         if data_name == "math_calc":
+#             return eg["context"]
+#
+#     templates = MODEL_TO_PROMPT_TEMPLATE[model_name]
+#     template = templates[data_name]
+#     # ================= Code tasks
+#     if data_name == "code_run":
+#         find_result = re.findall(r"func_[0-9]+\(\-?[0-9]+\)", eg['input'])
+#         func_call = find_result[0]
+#         func = func_call.split("(")[0]
+#         return template.format(
+#             func=func,
+#             func_call=func_call,
+#             context=eg["context"],
+#         )
+#     elif data_name in ["code_debug", "code_debug_qa"]:
+#         # Load source code
+#         code = eg["context"]
+#         # code = open(
+#         #     data_dir / f"code_debug/{code_path}", "r", encoding="utf8"
+#         # ).read()
+#         if data_name == "code_debug":
+#             return template.format(
+#                 context=code,
+#                 OPTION_A=eg["options"][0],
+#                 OPTION_B=eg["options"][1],
+#                 OPTION_C=eg["options"][2],
+#                 OPTION_D=eg["options"][3],
+#             )
+#         return template.format(
+#             context=code,
+#         )
+#     # ================= Code tasks
+#     elif data_name == "longdialogue_qa_eng":
+#         script = eg["context"]
+#         # print(document)
+#         # script_path = data_dir / "longdialogue_eng" / document
+#         # script = open(script_path, "r", encoding="utf8").read()
+#         prompt = template.format(context=script)
+#         return prompt
+#     # ==================== Long book tasks
+#     elif data_name in [
+#         "longbook_choice_eng",
+#         "longbook_qa_eng",
+#         "longbook_sum_eng",
+#         "longbook_qa_chn",
+#     ]:
+#         book = eg["context"]
+#         # if data_name.endswith("_eng"):
+#         #     book = open(
+#         #         data_dir / "longbook_eng" / book_path, "r", encoding="utf8"
+#         #     ).read()
+#         # elif data_name.endswith("_chn"):
+#         #     book = open(
+#         #         data_dir / "longbook_chn" / book_path, "r", encoding="utf8"
+#         #     ).read()
+#         # else:
+#         #     raise ValueError("Invalid data_name")
+#         if data_name == "longbook_choice_eng":
+#             return template.format(
+#                 question=eg["input"],
+#                 context=book,
+#                 OPTION_A=eg["options"][0],
+#                 OPTION_B=eg["options"][1],
+#                 OPTION_C=eg["options"][2],
+#                 OPTION_D=eg["options"][3],
+#             )
+#         elif data_name == "longbook_qa_eng":
+#             return template.format(
+#                 question=eg["input"],
+#                 context=book,
+#             )
+#         elif data_name == "longbook_sum_eng":
+#             return template.format(
+#                 context=book,
+#             )
+#         elif data_name == "longbook_qa_chn":
+#             return template.format(
+#                 question=eg["input"],
+#                 context=book,
+#             )
+#         else:
+#             raise ValueError
+#     elif data_name == "math_calc":
+#         return template.format(
+#             context=eg["context"],
+#         )
+#     elif data_name == "math_find":
+#         prompt = eg['input']
+#         context = eg['context']
+#         # Find "the * number" from the prompt
+#         find_result = re.findall(r"The .+ of", prompt)
+#         assert find_result, f"Cannot find the target number in {prompt}"
+#         target_number = find_result[0].lower()[:-3]
+#         # Replace the number with the answer
+#         prefix = f"What is {target_number} in the following list?"
+#         return template.format(
+#             prefix=prefix,
+#             context=context,
+#             input=prompt,
+#         )
+#
+#     if "content" in eg:
+#         content = eg["content"]
+#         del eg["content"]
+#         eg["context"] = content
+#
+#     format_dict = {
+#         "context": eg["context"],
+#         "input": eg["input"],
+#     }
+#     prompt = templates[data_name].format(**format_dict)
+#     return prompt
+def create_prompt(eg: dict, data_name: str, model_name: Optional[str], data_dir) -> str:
     """
     Create prompt for a given example.
 
     Args:
         eg: example dict
         data_name: name of the dataset/task
+        model_name: optional, used to fetch model-specific templates.
     """
     data_dir = Path(data_dir)
-    if model_name == "gpt4":
-        # Math.Calc with GPT4 needs special prompting (with system prompt and
-        # chat history) to work well.
-        if data_name == "math_calc":
-            return eg["context"]
 
-    templates = MODEL_TO_PROMPT_TEMPLATE[model_name]
-    template = templates[data_name]
-    # ================= Code tasks
+    # Directly use the appropriate template if the model_name is provided.
+    if model_name and model_name in MODEL_TO_PROMPT_TEMPLATE:
+        templates = MODEL_TO_PROMPT_TEMPLATE[model_name]
+        template = templates[data_name]
+    else:
+        # If no model-specific template, return a basic prompt or handle differently.
+        return eg["context"]
+
+    # Now create the prompt based on the template and task data
     if data_name == "code_run":
         find_result = re.findall(r"func_[0-9]+\(\-?[0-9]+\)", eg['input'])
         func_call = find_result[0]
@@ -154,11 +279,7 @@ def create_prompt(eg: dict, data_name: str, model_name: str, data_dir) -> str:
             context=eg["context"],
         )
     elif data_name in ["code_debug", "code_debug_qa"]:
-        # Load source code
         code = eg["context"]
-        # code = open(
-        #     data_dir / f"code_debug/{code_path}", "r", encoding="utf8"
-        # ).read()
         if data_name == "code_debug":
             return template.format(
                 context=code,
@@ -167,18 +288,11 @@ def create_prompt(eg: dict, data_name: str, model_name: str, data_dir) -> str:
                 OPTION_C=eg["options"][2],
                 OPTION_D=eg["options"][3],
             )
-        return template.format(
-            context=code,
-        )
-    # ================= Code tasks
+        return template.format(context=code)
     elif data_name == "longdialogue_qa_eng":
         script = eg["context"]
-        # print(document)
-        # script_path = data_dir / "longdialogue_eng" / document
-        # script = open(script_path, "r", encoding="utf8").read()
         prompt = template.format(context=script)
         return prompt
-    # ==================== Long book tasks
     elif data_name in [
         "longbook_choice_eng",
         "longbook_qa_eng",
@@ -186,16 +300,6 @@ def create_prompt(eg: dict, data_name: str, model_name: str, data_dir) -> str:
         "longbook_qa_chn",
     ]:
         book = eg["context"]
-        # if data_name.endswith("_eng"):
-        #     book = open(
-        #         data_dir / "longbook_eng" / book_path, "r", encoding="utf8"
-        #     ).read()
-        # elif data_name.endswith("_chn"):
-        #     book = open(
-        #         data_dir / "longbook_chn" / book_path, "r", encoding="utf8"
-        #     ).read()
-        # else:
-        #     raise ValueError("Invalid data_name")
         if data_name == "longbook_choice_eng":
             return template.format(
                 question=eg["input"],
@@ -211,9 +315,7 @@ def create_prompt(eg: dict, data_name: str, model_name: str, data_dir) -> str:
                 context=book,
             )
         elif data_name == "longbook_sum_eng":
-            return template.format(
-                context=book,
-            )
+            return template.format(context=book)
         elif data_name == "longbook_qa_chn":
             return template.format(
                 question=eg["input"],
@@ -222,17 +324,13 @@ def create_prompt(eg: dict, data_name: str, model_name: str, data_dir) -> str:
         else:
             raise ValueError
     elif data_name == "math_calc":
-        return template.format(
-            context=eg["context"],
-        )
+        return template.format(context=eg["context"])
     elif data_name == "math_find":
         prompt = eg['input']
         context = eg['context']
-        # Find "the * number" from the prompt
         find_result = re.findall(r"The .+ of", prompt)
         assert find_result, f"Cannot find the target number in {prompt}"
         target_number = find_result[0].lower()[:-3]
-        # Replace the number with the answer
         prefix = f"What is {target_number} in the following list?"
         return template.format(
             prefix=prefix,
@@ -240,6 +338,7 @@ def create_prompt(eg: dict, data_name: str, model_name: str, data_dir) -> str:
             input=prompt,
         )
 
+    # Default behavior if content key exists
     if "content" in eg:
         content = eg["content"]
         del eg["content"]
@@ -249,9 +348,8 @@ def create_prompt(eg: dict, data_name: str, model_name: str, data_dir) -> str:
         "context": eg["context"],
         "input": eg["input"],
     }
-    prompt = templates[data_name].format(**format_dict)
+    prompt = template.format(**format_dict)
     return prompt
-
 
 def get_answer(eg: dict, data_name: str):
     if data_name in ["code_debug", "longbook_choice_eng"]:
@@ -271,20 +369,51 @@ def get_answer(eg: dict, data_name: str):
 
     return eg["answer"]
 
-
+# Old version - Commented out as GPT4 is no longer used....
+# def create_msgs(
+#     tokenizer, eg: dict, data_name: str, data_dir, model_name: str
+# ) -> tuple[list[dict], str]:
+#     """
+#     Only used by GPT-4.
+#     """
+#     prompt = create_prompt(eg, data_name, model_name, data_dir)
+#     tokens = tokenizer.encode(prompt)
+#     # - 1000 to have space for system message and other stuff.
+#     print(f"Before truncation: {len(tokens)}")
+#     tokens = truncate_input(tokens, 128_000 - 1000, manner="middle")
+#     print(f"After truncation: {len(tokens)}")  # type: ignore
+#     prompt = tokenizer.decode(tokens)
+#     if data_name == "math_calc":
+#         return [
+#             {"role": "system", "content": create_system_msg(data_name)},
+#             {"role": "user", "content": "1 + 2 - 4 - 10"},
+#             {"role": "system", "content": "[1, 3, -1, -11]"},
+#             {"role": "user", "content": prompt},
+#         ], prompt
+#     else:
+#         return [
+#             {
+#                 "role": "system",
+#                 "content": "You are a helpful assistant",  # noqa
+#             },  # noqa
+#             {"role": "user", "content": prompt},
+#         ], prompt
 def create_msgs(
-    tokenizer, eg: dict, data_name: str, model_name: str, data_dir
+    tokenizer, eg: dict, data_name: str, data_dir, model_name: Optional[str] = None
 ) -> tuple[list[dict], str]:
     """
-    Only used by GPT-4.
+    Create messages for a given example.
     """
     prompt = create_prompt(eg, data_name, model_name, data_dir)
-    tokens = tokenizer.encode(prompt)
-    # - 1000 to have space for system message and other stuff.
-    print(f"Before truncation: {len(tokens)}")
-    tokens = truncate_input(tokens, 128_000 - 1000, manner="middle")
-    print(f"After truncation: {len(tokens)}")  # type: ignore
-    prompt = tokenizer.decode(tokens)
+
+    # Check if tokenizer is provided and initialized
+    if tokenizer:
+        tokens = tokenizer.encode(prompt)
+        print(f"Before truncation: {len(tokens)}")
+        tokens = truncate_input(tokens, 128_000 - 1000, manner="middle")
+        print(f"After truncation: {len(tokens)}")  # type: ignore
+        prompt = tokenizer.decode(tokens)
+
     if data_name == "math_calc":
         return [
             {"role": "system", "content": create_system_msg(data_name)},

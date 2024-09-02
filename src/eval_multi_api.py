@@ -18,10 +18,13 @@
 #  - vllm
 #  - tabbyapi
 #
+# Imports:
 import configparser
 from pathlib import Path
 import time
 from typing import Dict, Any, Optional, List
+#
+# Local Imports
 from eval_utils import (
     create_msgs,
     load_data,
@@ -29,8 +32,6 @@ from eval_utils import (
     iter_jsonl,
     get_answer,
 )
-
-# Import API-specific functions
 from LLM_API_Calls import (
     chat_with_openai,
     chat_with_anthropic,
@@ -47,6 +48,10 @@ from LLM_API_Calls_Local import (
     chat_with_vllm,
     chat_with_tabbyapi
 )
+#
+#######################################################################################################################
+#
+# Functions:
 
 class MultiAPILLMClient:
     def __init__(self, config_path: str):
@@ -70,35 +75,33 @@ class MultiAPILLMClient:
         config = configparser.ConfigParser()
         config.read(config_path)
 
-        # Convert the ConfigParser object to a dictionary
+        # Convert the ConfigParser object to a dictionary without flattening
         config_dict = {section: dict(config.items(section)) for section in config.sections()}
-
-        # Flatten the dictionary if needed (e.g., if you don't want nested sections)
-        flattened_config = {}
-        for section, params in config_dict.items():
-            for key, value in params.items():
-                flattened_config[key] = value
-
-        return flattened_config
+        return config_dict
 
     def chat(self, api_name: str, messages: List[Dict[str, str]],
              model: Optional[str] = None,
              temperature: Optional[float] = None,
              max_tokens: Optional[int] = None,
              **kwargs) -> str:
-        if api_name not in self.api_functions:
+
+        # Access the API key directly from the appropriate section
+        if api_name in self.api_functions:
+            api_key = self.config['API'].get(f'{api_name}_api_key')
+        elif api_name in ['llamacpp', 'kobold', 'oobabooga', 'vllm', 'tabbyapi']:
+            api_key = self.config['Local-API'].get(f'{api_name}_api_key')
+        else:
             raise ValueError(f"Unsupported API: {api_name}")
 
-        api_key = self.config['api_keys'].get(api_name)
         if not api_key:
             raise ValueError(f"API key not found for {api_name}")
 
         chat_function = self.api_functions[api_name]
-        
+
         # Use config values if not provided in the method call
-        model = model or self.config.get('models', {}).get(api_name)
-        temperature = temperature or self.config.get('temperature', {}).get(api_name)
-        max_tokens = max_tokens or self.config.get('max_tokens', {}).get(api_name)
+        model = model or self.config['API'].get(f'{api_name}_model')
+        temperature = temperature or self.config['API'].get('temperature')
+        max_tokens = max_tokens or self.config['API'].get('max_tokens')
 
         # Extract the input_data from messages (assuming it's the last user message)
         input_data = next((msg['content'] for msg in reversed(messages) if msg['role'] == 'user'), "")
@@ -124,30 +127,21 @@ class MultiAPILLMClient:
             return chat_function(**common_params, kobold_api_ip=kwargs.get('kobold_api_ip'),
                                  temp=temperature, system_message=kwargs.get('system_message'))
         elif api_name in ['oobabooga', 'vllm', 'tabbyapi']:
-            # These APIs might need special handling, adjust as necessary
             return chat_function(**common_params, **kwargs)
         else:
-            # For any other APIs, pass all parameters
             return chat_function(**common_params, model=model, temperature=temperature, max_tokens=max_tokens, **kwargs)
 
 def main():
     args = parse_args()
     verbose = args.verbose
     task = args.task
+    # New argument for selecting the API
     api_name = args.api
 
     # Load config from a JSON file
     client = MultiAPILLMClient('config.txt')
 
-    # Construct the correct path based on the provided data_dir and task
-    data_path = Path(args.data_dir) / f"{task}.jsonl"
-
-    # Make sure the data_path points to the correct file
-    if not data_path.exists():
-        raise FileNotFoundError(f"Data file not found: {data_path}")
-
-    # Load data
-    examples = load_data(data_path)
+    examples = load_data(task)
 
     result_dir = Path(args.output_dir)
     result_dir.mkdir(exist_ok=True, parents=True)

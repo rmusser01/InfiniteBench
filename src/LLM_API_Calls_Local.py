@@ -6,6 +6,8 @@
 ####
 from typing import Union
 
+import requests
+
 ####################
 # Function List
 # FIXME - UPDATE Function Arguments

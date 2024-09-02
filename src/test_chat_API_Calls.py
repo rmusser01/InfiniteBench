@@ -5,8 +5,7 @@
 # python -m unittest test_chat_API_Calls.py
 
 import unittest
-import logging
-from eval_utils import load_and_log_configs
+
 from LLM_API_Calls import (
     chat_with_openai,
     chat_with_anthropic,
@@ -17,6 +16,8 @@ from LLM_API_Calls import (
     chat_with_deepseek,
     chat_with_mistral
 )
+from eval_utils import load_and_log_configs
+
 
 class TestLLMAPICallsIntegration(unittest.TestCase):
 
