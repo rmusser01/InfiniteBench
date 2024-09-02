@@ -1,7 +1,7 @@
-# Local_Summarization_Lib.py
+# LLM_API_Calls_Local.py
 #########################################
-# Local Summarization Library
-# This library is used to perform summarization with a 'local' inference engine.
+# Local Chat API library
+# This library is used to perform API calls with a 'local' inference engine.
 #
 ####
 
