@@ -79,9 +79,11 @@ def main():
     args = parse_args()
     verbose = args.verbose
     task = args.task
-    api_name = args.api  # New argument for selecting the API
+    # New argument for selecting the API
+    api_name = args.api  
 
-    client = MultiAPILLMClient('config.json')  # Load config from a JSON file
+    # Load config from a JSON file
+    client = MultiAPILLMClient('config.json')
 
     examples = load_data(task)
 
@@ -103,10 +105,12 @@ def main():
     while i < stop_idx:
         eg = examples[i]
         msgs, prompt = create_msgs(
-            client.config.get('tokenizer', {}).get(api_name),  # Use API-specific tokenizer if available
+            # Use API-specific tokenizer if available
+            client.config.get('tokenizer', {}).get(api_name),  
             eg,
             task,
-            model_name=client.config.get('models', {}).get(api_name),  # Use API-specific model
+            # Use API-specific model
+            model_name=client.config.get('models', {}).get(api_name),
             data_dir=args.data_dir
         )
         if verbose:
